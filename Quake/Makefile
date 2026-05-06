@@ -178,7 +178,7 @@ endif
 ifeq ($(HOST_OS),haiku)
 COMMON_LIBS= -lGL -ldl
 else
-COMMON_LIBS= -lGL -ldl -lm
+COMMON_LIBS= -lGL -ldl -lm -lglib-2.0 -lwebsockets -ljansson
 endif
 
 LIBS = $(COMMON_LIBS) $(NET_LIBS) $(CODECLIBS)
@@ -241,6 +241,8 @@ OBJS = strlcat.o \
 	$(SYSOBJ_SND) \
 	$(SYSOBJ_CDA) \
 	$(SYSOBJ_NET) \
+	APCc.o \
+	ap_impl.o \
 	net_dgrm.o \
 	net_loop.o \
 	net_main.o \

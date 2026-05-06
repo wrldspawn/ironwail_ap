@@ -1,7 +1,7 @@
 //#include "quakedef.h"
 // [ap] includes
 #include "ap_impl.h"
-#include <APCc.h>
+#include "APCc.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -9,12 +9,15 @@
 #ifdef _WIN32
 #include <windows.h>  // For HANDLE, GetStdHandle, WriteConsoleA, MessageBoxW, MultiByteToWideChar
 #include <wchar.h>    // For wchar_t
+#else
+#include <pthread.h>
+#include <pwd.h>
 #endif
 
 // Func Defs // AP Impl Funcs
 void AP_Initialize (json_t* game_config, ap_connection_settings_t connection);
 
-json_error_t jerror;
+static json_error_t jerror;
 json_t* ap_config = NULL;
 json_t* ap_connect_info = NULL;
 json_t* ap_game_config = NULL;
@@ -85,6 +88,12 @@ typedef struct {
 extern ap_state_t* ap_game_state = NULL;
 
 GQueue* ap_message_queue = NULL;
+
+#ifndef _WIN32
+#ifdef DO_USERDIRS
+static char userdir[PATH_MAX];
+#endif // DO_USERDIRS
+#endif // !_WIN32
 
 // rapidhash
 uint64_t rapidhash_seed = AP_QUAKE_ID_PREFIX;
@@ -663,7 +672,7 @@ char* extract_bracketed_part (const char* str) {
 }
 
 int set_clipboard_text (const char* text) {
-
+#ifdef _WIN32
 	if (!OpenClipboard (NULL)) {
 		return 1;
 	}
@@ -706,6 +715,7 @@ int set_clipboard_text (const char* text) {
 
 	GlobalUnlock (hData);
 	CloseClipboard ();
+#endif
 
 	return 0;
 }
@@ -1011,7 +1021,7 @@ bool AP_CheckVictory (void)
 		json_object_set (player_obj, "victory", json_integer(1));
 		ap_game_state->need_sync = true;
 		AP_StoryComplete ();
-		//g_queue_push_tail (ap_message_queue, _strdup ("Goal reached!\n"));
+		//g_queue_push_tail (ap_message_queue, g_strdup ("Goal reached!\n"));
 	}
 	return reached_goal;
 }
@@ -1139,7 +1149,7 @@ void ap_debug_init ()
 
 void ap_debug_add_edict_to_lut (uint64_t loc_hash, char* loc_name)
 {
-	char* value = _strdup (loc_name);
+	char* value = g_strdup (loc_name);
 	uint64_t* key = malloc (sizeof (uint64_t));
 	if (key) *key = loc_hash;
 	g_hash_table_insert (ap_debug_edict_lut, key, value);
@@ -1597,7 +1607,27 @@ void AP_LibShutdown (void)
 
 void ap_init_connection ()
 {
+#if !defined (_WIN32) && defined (DO_USERDIRS)
+	// FIXME: no way to get host_parms without cyclic dependency, so we have to hardcode it
+	const char *home_dir = NULL;
+	struct passwd	*pwent;
+
+	pwent = getpwuid( getuid() );
+	if (pwent == NULL)
+		perror("getpwuid");
+	else
+		home_dir = pwent->pw_dir;
+	if (home_dir == NULL)
+		home_dir = getenv("HOME");
+
+	sprintf(userdir, "%s/.ironwail", home_dir);
+
+	char config_buf[sizeof("ap_config.json") + sizeof(userdir)];
+	sprintf(config_buf, "%s/ap_config.json", userdir);
+	ap_config = json_load_file ((char*)config_buf, 0, &jerror);
+#else
 	ap_config = json_load_file ("ap_config.json", 0, &jerror);
+#endif
 	if (!ap_config) {
 		ap_error ("ap_config.json not found.");
 		exit (0);
@@ -1605,7 +1635,13 @@ void ap_init_connection ()
 	}
 	// TODO: This should probably run over an ingame menu later
 	// For now grab values from ap_connect_info.json
+#if !defined (_WIN32) && defined (DO_USERDIRS)
+	char coninf_buf[sizeof("ap_connect_info.json") + sizeof(userdir)];
+	sprintf(coninf_buf, "%s/ap_connect_info.json", userdir);
+	json_t* ap_connect_info = json_load_file ((char*)coninf_buf, 0, &jerror);
+#else
 	json_t* ap_connect_info = json_load_file ("ap_connect_info.json", 0, &jerror);
+#endif
 	if (!ap_connect_info) {
 		ap_error ("ap_connect_info.json not found.");
 		exit (0);
@@ -1971,9 +2007,17 @@ static void init_dyn_player (json_t* dyn_player) {
 
 // AP Connection Funcs
 
+#ifdef _WIN32
 DWORD WINAPI service_loop_thread (LPVOID lpParam) {
+#else
+void* service_loop_thread (void* arg) {
+#endif
 	service_loop ();
+#ifdef _WIN32
 	return 0;
+#else
+	return NULL;
+#endif
 }
 
 void AP_Initialize (json_t* game_config, ap_connection_settings_t connection)
@@ -2000,7 +2044,6 @@ void AP_Initialize (json_t* game_config, ap_connection_settings_t connection)
 	ap_keys_per_level = g_hash_table_new (g_string_hash, g_string_equal);
 	ap_totalcollected_data = g_hash_table_new (g_string_hash, g_string_equal);
 	ap_itemcount_map = g_hash_table_new (g_int64_hash, g_int64_equal);
-	
 
 	ap_message_queue = g_queue_new ();
 	scout_reqs = g_array_new (FALSE, FALSE, sizeof (gpointer));
@@ -2010,7 +2053,7 @@ void AP_Initialize (json_t* game_config, ap_connection_settings_t connection)
 
 	init_location_table (json_object_get (game_config, "locations"));
 	init_item_table (json_object_get (game_config, "items"));
-	
+
 	AP_SetClientVersion (AP_NetworkVersion_new (0, 6, 1));
 	AP_SetDeathLinkSupported (1);
 
@@ -2030,7 +2073,7 @@ void AP_Initialize (json_t* game_config, ap_connection_settings_t connection)
 			exit (0);
 		}
 	}
-	
+
 	ap_global_state = AP_CONNECTED;
 
 	AP_SetItemClearCallback (&AP_ClearAllItems);
@@ -2058,14 +2101,28 @@ void AP_Initialize (json_t* game_config, ap_connection_settings_t connection)
 	if (!AP_WebsocketSulInit (50))
 		ap_printf ("Failed to create Websocket Sul.\n");
 
+#ifdef _WIN32
 	HANDLE hThread = CreateThread (NULL, 0, service_loop_thread, NULL, 0, NULL);
 	if (hThread == NULL) {
 		ap_printf ("Error creating service loop thread\n");
 		return;
 	}
+#else
+	pthread_t thread_id;
+	int thread_err = pthread_create(&thread_id, NULL, service_loop_thread, NULL);
+	if (thread_err != 0) {
+		ap_printf ("Error creating service loop thread\n");
+		return;
+	}
+	pthread_detach(thread_id);
+#endif
 
 	ap_printf ("Waiting for server info.\n");
-	while (!ap_received_scout_info) {}
+	while (!ap_received_scout_info) {
+#ifndef _WIN32
+		usleep(100);
+#endif
+	}
 
 	ap_printf ("Server info received.\n");
 

@@ -1,6 +1,6 @@
 # Ironwail AP
 A fork of [Ironwail](https://github.com/andrei-drexler/ironwail) designed to integrate into [Archipelago](https://github.com/ArchipelagoMW/Archipelago/releases).  
-Currently only Windows x64 is supported.  
+Currently only Windows x64 is officially supported.
 
 ## APWorld Setup:
 - Put quake.apworld in C:\\ProgramData\\Archipelago\\custom_worlds\\
@@ -46,6 +46,19 @@ The messages have a 2 second cooldown so the player doesn't get spammed.
 |---|---|
 |ap_printdoorblocked|Show a console message if a door was blocked|
 |ap_printbuttonblocked|Show a console message if a button was blocked|
+
+## Linux Compilation
+
+In addition to the [normal Ironwail dependencies](https://github.com/NixOS/nixpkgs/blob/nixos-25.11/pkgs/by-name/ir/ironwail/package.nix#L37-L51),
+you will need glib-2.0, jansson, libwebsockets (compiled with `-DLWS_WITHOUT_EXTENSIONS=OFF`), and [rapidhash v1.0](https://github.com/Nicoshev/rapidhash/releases/tag/rapidhash_v1.0).
+
+Compile with GCC with the following flags added
+```sh
+$(pkg-config --cflags glib-2.0 libwebsockets jansson) -Wno-incompatible-pointer-types -Wno-error=format-security -I/path/to/folder/containing/rapidhash
+```
+
+A Nix package can be found [here](https://gitlab.com/worldspawn/nix/-/tree/f28c19a8eb5237a58fd9cb98b446b6424ab8128f/packages/ironwail-ap),
+which also includes extra patches for separating executable names and userdir to allow vanilla Ironwail to be installed alongside.
 
 # Original Ironwail Readme:
 
