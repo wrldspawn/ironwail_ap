@@ -257,7 +257,7 @@ Returns false if the entity removed itself.
 qboolean SV_RunThink (edict_t *ent)
 {
 	float	thinktime;
-	
+
 	thinktime = ent->v.nextthink;
 	if (thinktime <= 0 || thinktime > qcvm->time + host_frametime)
 		return true;
@@ -298,10 +298,6 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 	{
 		pr_global_struct->self = EDICT_TO_PROG(e1);
 		pr_global_struct->other = EDICT_TO_PROG(e2);
-		if (!strcmp (PR_GetString (e1->v.classname), "player")) { 
-			//Con_DPrintf ("sv_impact E1 Touch of %s and %s\n", PR_GetString (e1->v.classname), PR_GetString (e2->v.classname));
-			//ED_Print (e2);
-		}
 		PR_ExecuteProgram (e1->v.touch);
 	}
 
@@ -309,10 +305,6 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 	{
 		pr_global_struct->self = EDICT_TO_PROG(e2);
 		pr_global_struct->other = EDICT_TO_PROG(e1);
-		if (!strcmp (PR_GetString (e1->v.classname), "player")) { 
-			//Con_DPrintf ("sv_impact E2 Touch of %s and %s\n", PR_GetString (e1->v.classname), PR_GetString (e2->v.classname));
-			//ED_Print (e2);
-		}
 		PR_ExecuteProgram (e2->v.touch);
 	}
 
@@ -1163,7 +1155,7 @@ void SV_Physics_Client (edict_t	*ent, int num)
 		else if (ap_showmonsters.value == 0 && contains_monster (r_showbboxes_filter_strings)) {
 			remove_monster_from_bboxfilter (r_showbboxes_filter_strings);
 		}
-		
+
 		if (ap_fresh_map) {
 			ap_fresh_map = 0;
 			ap_prog_sounds = 0;
@@ -1206,7 +1198,7 @@ void SV_Physics_Client (edict_t	*ent, int num)
 				else Con_SafePrintf ("%s\n", message_parts[0]);
 			}
 		}
-		
+
 		// give inventory items
 		sv_player->v.items = (int)sv_player->v.items | ap_inventory_flags;
 
@@ -1385,7 +1377,7 @@ void SV_Physics_Client (edict_t	*ent, int num)
 
 
 		// check for active health/death traps
-		
+
 		if (ap_active_traps[0]) {
 			SV_StartSound (sv_player, 0, "player/pain2.wav", 255, 1);
 			sv_player->v.health = 20;
@@ -1396,7 +1388,7 @@ void SV_Physics_Client (edict_t	*ent, int num)
 				AP_DeathLinkSend ();
 			player_dead = 1;
 		}
-		
+
 		//TODO: sv_autoload 0 does nothing :(
 		if (ap_active_traps[1] || AP_DeathLinkPending()) {
 			Cbuf_AddText ("impulse 237\n");
@@ -1427,8 +1419,6 @@ void SV_Physics_Client (edict_t	*ent, int num)
 		}
 	}
 
-
-	
 //
 // call standard client pre-think
 //

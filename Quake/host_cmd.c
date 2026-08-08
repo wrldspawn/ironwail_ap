@@ -550,6 +550,7 @@ static const char *const knownmods[][2] =
 	{"rogue",		"Dissolution of Eternity"},
 	{"dopa",		"Dimension of the Past"},
 	{"mg1",			"Dimension of the Machine"},
+	{"mg3",			"Dawn of the Machine"},
 	{"q64",			"Quake (Nintendo 64)"},
 	{"ctf",			"Capture The Flag"},
 	{"udob",		"Underdark Overbright"},
@@ -777,6 +778,13 @@ static void Modlist_RegisterAddons (void *param)
 		if (!info->json)
 		{
 			info->json = entry;
+			// If the addon has a non-localized name, convert it in-place from UTF-8
+			if (name && name[0] && name[0] != '$')
+			{
+				char utf8name[1024];
+				q_strlcpy (utf8name, name, sizeof (utf8name));
+				UTF8_ToQuake ((char *)name, strlen (name) + 1, utf8name);
+			}
 			info->full_name = name;
 			info->download = download;
 			if (size)
@@ -1940,6 +1948,26 @@ static void Host_Map_f (void)
 	int		i;
 	char	name[MAX_QPATH], *p;
 
+	if (Cmd_Argc() < 2)	//no map name given
+	{
+		if (cls.state == ca_dedicated)
+		{
+			if (sv.active)
+				Con_Printf ("Current map: %s\n", sv.name);
+			else
+				Con_Printf ("Server not active\n");
+		}
+		else if (cls.state == ca_connected)
+		{
+			Con_Printf ("Current map: %s ( %s )\n", cl.levelname, cl.mapname);
+		}
+		else
+		{
+			Con_Printf ("map <levelname>: start a new server\n");
+		}
+		return;
+	}
+
 	if (cmd_source != src_command)
 		return;
 
@@ -1979,26 +2007,6 @@ static void Host_Map_f (void)
 
 	// [ap] Only called once a map is loaded
 	ap_fresh_map = 1;
-
-	if (Cmd_Argc () < 2)	//no map name given
-	{
-		if (cls.state == ca_dedicated)
-		{
-			if (sv.active)
-				Con_Printf ("Current map: %s\n", sv.name);
-			else
-				Con_Printf ("Server not active\n");
-		}
-		else if (cls.state == ca_connected)
-		{
-			Con_Printf ("Current map: %s ( %s )\n", cl.levelname, cl.mapname);
-		}
-		else
-		{
-			Con_Printf ("map <levelname>: start a new server\n");
-		}
-		return;
-	}
 }
 
 /*
@@ -3794,7 +3802,7 @@ static void Host_Startdemos_f (void)
 	{
 		cls.demonum = 0;
 		Cbuf_InsertText ("menu_main\n");
-		if (!fitzmode && !cl_startdemos.value)
+		if (!cl_startdemos.value)
 		{  /* QuakeSpasm customization: */
 			/* go straight to menu, no CL_NextDemo */
 			cls.demonum = -1;

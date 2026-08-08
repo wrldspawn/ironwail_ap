@@ -83,7 +83,7 @@ float		scr_conlines;		// lines of console to display
 cvar_t		scr_menuscale = {"scr_menuscale", "1", CVAR_ARCHIVE};
 cvar_t		scr_menubgalpha = {"scr_menubgalpha", "0.7", CVAR_ARCHIVE};
 cvar_t		scr_menubgstyle = {"scr_menubgstyle", "-1", CVAR_ARCHIVE};
-cvar_t		scr_centerprintbg = {"scr_centerprintbg", "0", CVAR_ARCHIVE}; // 0 = off; 1 = text box; 2 = menu box; 3 = menu strip
+cvar_t		scr_centerprintbg = {"scr_centerprintbg", "2", CVAR_ARCHIVE}; // 0 = off; 1 = text box; 2 = menu box; 3 = menu strip
 cvar_t		scr_sbarscale = {"scr_sbarscale", "1", CVAR_ARCHIVE};
 cvar_t		scr_sbaralpha = {"scr_sbaralpha", "0.75", CVAR_ARCHIVE};
 cvar_t		scr_conwidth = {"scr_conwidth", "0", CVAR_ARCHIVE};
@@ -161,7 +161,7 @@ int	scr_tileclear_updates = 0; //johnfitz
 
 hudstyle_t	hudstyle;
 
-void SCR_ScreenShot_f (void);
+static void SCR_ScreenShot_f (void);
 
 /*
 ===============================================================================
@@ -181,6 +181,30 @@ int			scr_erase_center;
 
 /*
 ==============
+SCR_GetCenterPrintWrapLimit
+
+Returns the maximum number of chars to be printed on a single line.
+==============
+*/
+static int SCR_GetCenterPrintWrapLimit (void)
+{
+	drawtransform_t transform;
+	float left, top, right, bottom;
+	float width;
+
+	Draw_GetCanvasTransform (CANVAS_MENU, &transform);
+	Draw_GetTransformBounds (&transform, &left, &top, &right, &bottom);
+	width = right - left;
+
+	// avoid overlong lines
+	width = LERP (320.0f, width, 0.25f);
+	width = CLAMP (320.0f, width, 400.0f);
+
+	return ((int) width) >> 3;
+}
+
+/*
+==============
 SCR_CenterPrint
 
 Called for important messages that should stay in the center of the screen
@@ -191,7 +215,9 @@ void SCR_CenterPrint (const char *str) //update centerprint data
 {
 	int cols;
 
-	q_strlcpy (scr_centerstring, str, sizeof (scr_centerstring));
+	cols = scr_usekfont.value ? SCR_GetCenterPrintWrapLimit () : 0;
+	COM_WordWrap (scr_centerstring, str, sizeof (scr_centerstring), cols);
+
 	if (!scr_centerstring[0])
 	{
 		scr_center_lines = 0;
@@ -713,10 +739,20 @@ void SCR_Init (void)
 
 /*
 ==============
+SCR_IsClockVisible
+==============
+*/
+static qboolean SCR_IsClockVisible (void)
+{
+	return scr_clock.value || Sbar_ShowingScores ();
+}
+
+/*
+==============
 SCR_DrawFPS -- johnfitz
 ==============
 */
-void SCR_DrawFPS (void)
+static void SCR_DrawFPS (void)
 {
 	static double	oldtime = 0;
 	static double	lastfps = 0;
@@ -762,14 +798,14 @@ void SCR_DrawFPS (void)
 		{
 			x = 320 - 16 - (strlen(st)<<3);
 			y = 8;
-			if (scr_clock.value) y += 8; //make room for clock
+			if (SCR_IsClockVisible ()) y += 8; //make room for clock
 			GL_SetCanvas (CANVAS_TOPRIGHT);
 		}
 		else
 		{
 			x = 320 - (strlen(st)<<3);
 			y = 200 - 8;
-			if (scr_clock.value) y -= 8; //make room for clock
+			if (SCR_IsClockVisible ()) y -= 8; //make room for clock
 			GL_SetCanvas (CANVAS_BOTTOMRIGHT);
 		}
 		Draw_String (x, y, st);
@@ -782,7 +818,7 @@ void SCR_DrawFPS (void)
 SCR_DrawAPHUD
 ==============
 */
-void SCR_DrawAPHUD (void)
+static void SCR_DrawAPHUD (void)
 {
 	if (cl.intermission || CL_InCutscene () || scr_viewsize.value >= 130 || !AP_HOOK || console_active)
 		return;
@@ -835,8 +871,8 @@ void SCR_DrawAPHUD (void)
 		}
 		x = glcanvas.right - (strlen (str) << 3);
 		y = glcanvas.bottom - 80;
-		Draw_String (x, y, str);		
-	}	
+		Draw_String (x, y, str);
+	}
 
 	if (ap_scoreboard || ap_alwaysshowinventory.value) {
 		if (ap_shorthud.value) sprintf (str, "Qua:%i/%i Ivl:%i/%i Bio:%i/%i Ivs:%i/%i", ap_inv_arr[0], ap_inv_max_arr[0], ap_inv_arr[1], ap_inv_max_arr[1], ap_inv_arr[2], ap_inv_max_arr[2], ap_inv_arr[3], ap_inv_max_arr[3]);
@@ -897,7 +933,7 @@ void SCR_DrawAPHUD (void)
 			Draw_String (x, y, str);
 		}
 	}
-	
+
 	if (ap_scoreboard || ap_alwaysshowunlocks.value)
 	{
 		x = 0;
@@ -917,7 +953,7 @@ void SCR_DrawAPHUD (void)
 		x = 320 - (strlen (str) << 3);
 		Draw_String (x, y + 40, str);
 		GL_SetCanvas (CANVAS_SBAR);
-	}	
+	}
 
 	scr_tileclear_updates = 0;
 }
@@ -927,7 +963,7 @@ void SCR_DrawAPHUD (void)
 SCR_DrawSpeed
 ==============
 */
-void SCR_DrawSpeed (void)
+static void SCR_DrawSpeed (void)
 {
     if (cl.intermission || CL_InCutscene () || scr_viewsize.value >= 130)
 		return;
@@ -961,7 +997,7 @@ void SCR_DrawSpeed (void)
 			sprintf (st, "%3d", (int)display_speed);
 			float speedunits, alpha, size;
 			int	x, y;
-			
+
 			size = scr_sbarscale.value;
 			alpha = show_speed_alpha.value;
 
@@ -1001,11 +1037,11 @@ void SCR_DrawSpeed (void)
 SCR_DrawClock -- johnfitz
 ==============
 */
-void SCR_DrawClock (void)
+static void SCR_DrawClock (void)
 {
 	char	str[12];
 
-	if (scr_clock.value == 1 && scr_viewsize.value < 130)
+	if (SCR_IsClockVisible () && scr_viewsize.value < 130)
 	{
 		int minutes, seconds;
 
@@ -1052,7 +1088,7 @@ static void SCR_PrintMirrored (int x, int y, const char *str)
 SCR_DrawDemoControls
 ==============
 */
-void SCR_DrawDemoControls (void)
+static void SCR_DrawDemoControls (void)
 {
 	static const int	TIMEBAR_CHARS = 38;
 	static float		prevspeed = 1.0f;
@@ -1172,7 +1208,7 @@ void SCR_DrawDemoControls (void)
 SCR_DrawDevStats
 ==============
 */
-void SCR_DrawDevStats (void)
+static void SCR_DrawDevStats (void)
 {
 	char	str[40];
 	int		y = 25-10; //10=number of lines to print
@@ -1221,7 +1257,7 @@ void SCR_DrawDevStats (void)
 SCR_DrawTurtle
 ==============
 */
-void SCR_DrawTurtle (void)
+static void SCR_DrawTurtle (void)
 {
 	static int	count;
 
@@ -1248,7 +1284,7 @@ void SCR_DrawTurtle (void)
 SCR_DrawNet
 ==============
 */
-void SCR_DrawNet (void)
+static void SCR_DrawNet (void)
 {
 	if (realtime - cl.last_received_message < 0.3)
 		return;
@@ -1265,7 +1301,7 @@ void SCR_DrawNet (void)
 DrawPause
 ==============
 */
-void SCR_DrawPause (void)
+static void SCR_DrawPause (void)
 {
 	qpic_t	*pic;
 	float	alpha;
@@ -1301,7 +1337,7 @@ void SCR_DrawPause (void)
 SCR_DrawLoading
 ==============
 */
-void SCR_DrawLoading (void)
+static void SCR_DrawLoading (void)
 {
 	qpic_t	*pic;
 
@@ -1321,7 +1357,7 @@ void SCR_DrawLoading (void)
 SCR_DrawSaving
 ==============
 */
-void SCR_DrawSaving (void)
+static void SCR_DrawSaving (void)
 {
 	int x, y;
 
@@ -1334,7 +1370,7 @@ void SCR_DrawSaving (void)
 	y = 8;
 	if (hudstyle != HUD_CLASSIC && scr_viewsize.value < 130)
 	{
-		if (scr_clock.value) y += 8;
+		if (SCR_IsClockVisible ()) y += 8;
 		if (scr_showfps.value) y += 8;
 		if (y != 8)
 			y += 8;
@@ -1348,7 +1384,7 @@ void SCR_DrawSaving (void)
 SCR_DrawCrosshair -- johnfitz
 ==============
 */
-void SCR_DrawCrosshair (void)
+static void SCR_DrawCrosshair (void)
 {
 	if (cl.intermission || CL_InCutscene () || !crosshair.value || scr_viewsize.value >= 130)
 		return;
@@ -1540,7 +1576,7 @@ Show info for the highlighted entity with r_showfields/r_showbboxes
 
 static char *scr_edictoverlaystrings = NULL;
 
-void SCR_DrawEdictInfo (void)
+static void SCR_DrawEdictInfo (void)
 {
 	char		tinted[1024];
 	int			i;
@@ -1549,22 +1585,41 @@ void SCR_DrawEdictInfo (void)
 	vec3_t		crosshair, focus, anchor, proj, bgcolor;
 	edict_t		*ed;
 
-	if (VEC_SIZE (bbox_linked) == 0)
+	if (VEC_SIZE (bbox_linked) == 0 && VEC_SIZE (r_pointfile) == 0)
 		return;
 
 	GL_SetCanvas (CANVAS_BOTTOMRIGHT);
 	SCR_SetupProjToCanvasMap (&proj2canvas);
+	VectorMA (r_origin, 8.f, vpn, crosshair);
+
+	// If a pointfile was loaded, print "Leak" at the beginning
+	if (VEC_SIZE (r_pointfile) != 0)
+	{
+		VectorCopy (r_pointfile[0], anchor);
+		SCR_ClipToFrustum (anchor, crosshair);
+		ProjectVector (anchor, r_matviewproj, proj);
+		SCR_ProjToCanvas (proj, &proj2canvas, &x, &y);
+
+		VEC_CLEAR (scr_edictoverlaystrings);
+		MultiString_Append (&scr_edictoverlaystrings, "");
+		COM_TintString ("Leak", tinted, sizeof (tinted));
+		MultiString_Append (&scr_edictoverlaystrings, tinted);
+
+		SCR_DrawKeyValueOverlay (x, y, scr_edictoverlaystrings, rgb_black);
+	}
+
+	if (VEC_SIZE (bbox_linked) == 0)
+		return;
 
 	PR_SwitchQCVM (&sv.qcvm);
 
-	VectorMA (r_origin, 8.f, vpn, crosshair);
 	SCR_GetEntityCenter (bbox_linked[0], focus);
 	SCR_ClipToFrustum (focus, crosshair);
 
 	// Show edict numbers and classnames for all highlighted entities.
 	// Note: reversed order, so that the focused entity is drawn last,
 	// on top of all the others.
-	for (i = (int)VEC_SIZE (bbox_linked) - 1; i >= 0; i--)
+	for (i = (int) VEC_SIZE (bbox_linked) - 1; i >= 0; i--)
 	{
 		ed = bbox_linked[i];
 
@@ -1601,7 +1656,7 @@ void SCR_DrawEdictInfo (void)
 					loc_hash = generate_hash (ed->baseline.origin[0]-16, ed->baseline.origin[1]-16, ed->baseline.origin[2], classname);
 				}
 				else loc_hash = generate_hash (ed->baseline.origin[0], ed->baseline.origin[1], ed->baseline.origin[2], classname);
-				
+
 				char* ap_loc_name = edict_get_loc_name (loc_hash, "items");
 				if (AP_DEBUG_SPAWN && ap_loc_name != NULL) {
 					char* sub_str = extract_bracketed_part (ap_loc_name);
@@ -1730,7 +1785,7 @@ void SCR_DrawEdictInfo (void)
 SCR_SetUpToDrawConsole
 ==================
 */
-void SCR_SetUpToDrawConsole (void)
+static void SCR_SetUpToDrawConsole (void)
 {
 	//johnfitz -- let's hack away the problem of slow console when host_timescale is <0
 	extern cvar_t host_timescale;
@@ -1741,7 +1796,7 @@ void SCR_SetUpToDrawConsole (void)
 
 	if (scr_drawloading)
 		return;		// never a console with loading plaque
-	
+
 // decide on the height of the console
 	con_forcedup = !cl.worldmodel || cls.signon != SIGNONS;
 
@@ -1789,7 +1844,7 @@ void SCR_SetUpToDrawConsole (void)
 SCR_DrawConsole
 ==================
 */
-void SCR_DrawConsole (void)
+static void SCR_DrawConsole (void)
 {
 	if (scr_con_current)
 	{
@@ -1798,14 +1853,11 @@ void SCR_DrawConsole (void)
 		else
 			Draw_ConsoleBackground ();
 		clearconsole = 0;
-		console_active = 1;
 	}
 	else
 	{
-		qboolean cutscene = CL_InCutscene ();
 		if (key_dest == key_game || key_dest == key_message)
 			Con_DrawNotify ();	// only draw notify in game
-		console_active = 0;
 	}
 }
 
@@ -1990,7 +2042,7 @@ static void SCR_ScreenShot_Usage (void)
 SCR_ScreenShot_f
 ==================
 */
-void SCR_ScreenShot_f (void)
+static void SCR_ScreenShot_f (void)
 {
 	byte	*buffer;
 	char	ext[4];
@@ -2165,7 +2217,7 @@ void SCR_EndLoadingPlaque (void)
 const char	*scr_notifystring;
 qboolean	scr_drawdialog;
 
-void SCR_DrawNotifyString (void)
+static void SCR_DrawNotifyString (void)
 {
 	const char	*start;
 	int		l;
@@ -2265,7 +2317,7 @@ johnfitz -- modified to use glwidth/glheight instead of vid.width/vid.height
 	    also added scr_tileclear_updates
 ==================
 */
-void SCR_TileClear (void)
+static void SCR_TileClear (void)
 {
 	//ericw -- added check for glsl gamma. TODO: remove this ugly optimization?
 	if (scr_tileclear_updates >= vid.numpages && !gl_clear.value && vid_gamma.value == 1)

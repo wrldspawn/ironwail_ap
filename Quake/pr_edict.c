@@ -1458,17 +1458,17 @@ qboolean ED_HasLinks (const edict_t* ent) {
 			continue;
 		return 1;
 	}
-	
+
 	// Inspect all other edicts to find incoming links
 	// (either entity field references or target/targetname matches)
 	const char* focus_target = PR_GetString (ent->v.target);
 	const char* focus_targetname = PR_GetString (ent->v.targetname);
-	
+
 	for (i = 1, ed = NEXT_EDICT (qcvm->edicts); i < qcvm->num_edicts; i++, ed = NEXT_EDICT (ed))
 	{
 		if (ed == sv_player || ed->free || ed == ent)
 			continue;
-		
+
 		// Check for entity field references (other than .chain)
 		for (j = 0; j < qcvm->numentityfields; j++)
 		{
@@ -1479,7 +1479,7 @@ qboolean ED_HasLinks (const edict_t* ent) {
 				return 1;
 		}
 	}
-	
+
 	if (*focus_target || *focus_targetname)
 		return 1;
 
@@ -1581,6 +1581,7 @@ void ED_LoadFromFile (const char *data)
 		}
 
 		classname = PR_GetString (ent->v.classname);
+
 		if (sv.mapchecks.active)
 		{
 			int skillflags = (int)ent->v.spawnflags & (SPAWNFLAG_NOT_EASY|SPAWNFLAG_NOT_MEDIUM|SPAWNFLAG_NOT_HARD);
@@ -1631,7 +1632,7 @@ void ED_LoadFromFile (const char *data)
 				|| (current_skill >= 2 && ((int)ent->v.spawnflags & SPAWNFLAG_NOT_HARD)) )
 		{
 			// [ap] Don't despawn items on other skills for consistency
-			
+
 			// This does include deathmatch items if all three spawnflags are set
 			if ( ((int)ent->v.spawnflags & (SPAWNFLAG_NOT_EASY | SPAWNFLAG_NOT_MEDIUM | SPAWNFLAG_NOT_HARD)) == (SPAWNFLAG_NOT_EASY | SPAWNFLAG_NOT_MEDIUM | SPAWNFLAG_NOT_HARD))
 			{
@@ -1680,9 +1681,9 @@ void ED_LoadFromFile (const char *data)
 // immediately call spawn function
 //
 	// look for the spawn function
-		
+
 		// [ap] Overwrite spawn function of items and weapons with ap models
-		
+
 		// exception for the time machine on the final map of rogue
 		if (AP_KEEP_SPAWNS) 
 			func = ED_FindFunction (classname);
@@ -1715,7 +1716,7 @@ void ED_LoadFromFile (const char *data)
 
 			int do_replace = ap_replace_edict (loc_hash, "items");
 			int replace_blank = 0;
-			
+
 			if (AP_DEBUG_SPAWN) 
 				do_replace = 1;
 			// First check for forced spawns
@@ -1790,7 +1791,7 @@ void ED_LoadFromFile (const char *data)
 	ap_item_count += 1;
 	const char* suffix = "all_kills";
 	char* combined_string = (char*)malloc ((10 + strlen (sv.name) + 1) * sizeof (char));
-	
+
 	if (combined_string) {
 		strcpy (combined_string, sv.name);
 		strcat (combined_string, suffix);
@@ -2802,6 +2803,7 @@ void SaveData_WriteHeader (savedata_t *save)
 		ap_seed[sizeof (ap_seed) - 1] = '\0';
 	}
 	fprintf (save->file, "%s\n", ap_seed);
+
 	fprintf (save->file, "%i\n", SAVEGAME_VERSION);
 	fprintf (save->file, "%s\n", save->comment);
 

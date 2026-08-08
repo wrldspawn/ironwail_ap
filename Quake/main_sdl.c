@@ -39,7 +39,7 @@ static void Sys_InitSDL (void)
 	SDL_version v;
 	SDL_version *sdl_version = &v;
 	SDL_GetVersion(&v);
-	
+
 	Sys_Printf("Found SDL version %i.%i.%i\n",sdl_version->major,sdl_version->minor,sdl_version->patch);
 
 	if (SDL_Init(0) < 0) {
@@ -160,10 +160,9 @@ int main(int argc, char *argv[])
 	if (!parms.membase)
 		Sys_Error ("Not enough memory free; check disk space\n");
 
-
 	Sys_Printf("Host_Init\n");
 	Host_Init();
-	
+
 	oldtime = Sys_DoubleTime();
 	if (isDedicated)
 	{
@@ -209,7 +208,7 @@ int main(int argc, char *argv[])
 		time = newtime - oldtime;
 
 		Host_Frame (time);
-		
+
 		oldtime = newtime;
 	}
 

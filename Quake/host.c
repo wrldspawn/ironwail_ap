@@ -1035,7 +1035,7 @@ static void GetGameSummary (summary_t *s)
 		s->stats.total_monsters = cl.stats[STAT_TOTALMONSTERS];
 		s->stats.secrets        = cl.stats[STAT_SECRETS];
 		s->stats.total_secrets  = cl.stats[STAT_TOTALSECRETS];
-		
+
 		// [ap] Killed a monster, check if we have max kills
 		if (last_killcount != cl.stats[STAT_MONSTERS]) {
 			last_killcount = cl.stats[STAT_MONSTERS];
@@ -1062,9 +1062,9 @@ static void GetGameSummary (summary_t *s)
 				}
 				uint64_t loc_hash = generate_hash (999, 999, 999, combined_string);
 
-				
+
 				if (!AP_DEBUG_SPAWN) AP_CheckLocation (loc_hash, "items");
-				
+
 				ap_giveallkills = 0;
 			}
 
@@ -1115,9 +1115,9 @@ static void UpdateWindowTitle (void)
 		VID_SetWindowTitle (title);
 
 		if (current.stats.max_players > 1)
-			Steam_SetStatus_Multiplayer (current.stats.players, current.stats.max_players, utf8name);
+			Steam_SetStatus_Multiplayer (current.stats.players, current.stats.max_players, utf8name[0] ? utf8name : current.map);
 		else
-			Steam_SetStatus_SinglePlayer (utf8name);
+			Steam_SetStatus_SinglePlayer (utf8name[0] ? utf8name : current.map);
 	}
 	else
 	{

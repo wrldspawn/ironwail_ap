@@ -412,4 +412,5 @@ void SaveData_WriteHeader (savedata_t *save);
 //[ap] ed json dump
 void ED_Print_JSON (edict_t* ed, int ap_item_count);
 char* GetClassname_APFormat (edict_t* ed);
+
 #endif	/* QUAKE_PROGS_H */

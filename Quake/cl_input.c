@@ -367,7 +367,10 @@ void CL_AdjustAngles (void)
 	float	up, down;
 
 	if (CL_InCutscene ())
+	{
+		V_StopPitchDrift ();
 		return;
+	}
 
 	if ((in_speed.state & 1) ^ (cl_alwaysrun.value != 0.0))
 		speed = host_frametime * cl_anglespeedkey.value;
@@ -534,7 +537,7 @@ void CL_SendMove (const usercmd_t *cmd)
 		else if (((in_jump.state & 3) && ap_can_jump ()) || (sv_player && (in_jump.state & 3) && sv_player->v.waterlevel >= 3)) {
 			bits |= 2;
 		}
-			
+
 		in_jump.state &= ~2;
 
 		MSG_WriteByte (&buf, bits);

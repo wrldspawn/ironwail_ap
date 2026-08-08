@@ -63,7 +63,7 @@ extern cvar_t r_softemu_mdl_warp;
 extern cvar_t r_waterwarp;
 extern cvar_t r_oit;
 extern cvar_t r_alphasort;
-extern cvar_t r_md5;
+extern cvar_t r_enhancedmodels;
 extern cvar_t r_lerpmodels;
 extern cvar_t r_lerpmove;
 extern cvar_t snd_waterfx;
@@ -211,6 +211,9 @@ void M_ConfigureNetSubsystem(void);
 void M_SetSkillMenuMap (const char *name);
 void M_Options_SelectMods (void);
 void M_Options_Init (enum m_state_e state);
+void M_ChooseQuitMessage (void);
+void M_DrawQuitMessage (void);
+qboolean M_ForcedQuitMessage (float *alpha);
 
 #define PREVIEW_FADEIN_TIME				0.125
 #define PREVIEW_FADEOUT_TIME			0.125
@@ -372,56 +375,6 @@ static void M_PrintDotFill (int x, int y, const char *text, int cols, qboolean c
 	GL_SetCanvasColor (1.f, 1.f, 1.f, 1.f);
 }
 
-static int M_WordLength (const char *text)
-{
-	const char *start = text;
-	while (*text && !q_isblank (*text))
-		text++;
-	return text - start;
-}
-
-static int M_LineWrap (const char **text, int maxchars)
-{
-	const char *str = *text;
-	int i;
-
-	for (i = 0; i < maxchars && str[i]; /**/)
-	{
-		if (str[i] == '\n')
-		{
-			*text += i + 1;
-			return i;
-		}
-
-		// new word
-		if (!q_isblank (str[i]) && (i == 0 || q_isblank (str[i - 1])))
-		{
-			int len = M_WordLength (str + i);
-			// split word if longer than given limit
-			if (len > maxchars)
-			{
-				*text += maxchars;
-				return maxchars;
-			}
-			// not enough space left? push word to next line
-			if (i + len > maxchars)
-			{
-				*text += i;
-				return i;
-			}
-			// word fits, continue
-			i += len;
-		}
-		else
-			i++;
-	}
-
-	// avoid starting next line with a space
-	*text += i + (q_isblank (str[i]) ? 1 : 0);
-
-	return i;
-}
-
 int M_PrintWordWrap (int x, int y, const char *text, int width, int height, qboolean color)
 {
 	int maxcols = width / 8;
@@ -431,7 +384,7 @@ int M_PrintWordWrap (int x, int y, const char *text, int width, int height, qboo
 	while (*text && numlines < maxlines)
 	{
 		const char *line = text;
-		int len = M_LineWrap (&text, maxcols);
+		int len = COM_AdvanceLineWrapped (&text, maxcols);
 		M_PrintSubstring (x, y + numlines * 8, line, len, color);
 		numlines++;
 	}
@@ -1771,7 +1724,8 @@ static void M_Maps_UpdateLayout (void)
 	// [ap]
 	int gap_size = 16;
 	M_UpdateBounds ();
-	// [ap] 16*5 is just an estimate 
+
+	// [ap] 16*5 is just an estimate
 	// TODO: Check if this always works
 	height = mapsmenu.list.numitems * gap_size + MAPLIST_OFS + 16*5;
 	height = q_min (height, m_height);
@@ -2008,7 +1962,7 @@ void M_Maps_Draw (void)
 				mask = 128;
 			else
 				mask = 0;
-			
+
 			char buf[256];
 			if (mapsmenu.list.search.len > 0)
 				COM_TintSubstring (item->name, mapsmenu.list.search.text, buf, sizeof (buf));
@@ -2042,7 +1996,7 @@ void M_Maps_Draw (void)
 					q_strlcpy (buf, message, sizeof (buf));
 
 				GL_SetCanvasColor (1, 1, 1, 0.375f);
-				
+
 				for (/**/; j < namecols; j++)
 					M_DrawCharacter (x + j*8, y + i*gap_size, '.' | mask);
 				if (message)
@@ -2050,7 +2004,7 @@ void M_Maps_Draw (void)
 
 				M_PrintScroll (x + namecols*8, y + i*gap_size, desccols*8, buf,
 					selected ? mapsmenu.ticker.scroll_time : 0.0, true);
-				
+
 				if (!message)
 					GL_SetCanvasColor (1, 1, 1, 1);
 			}
@@ -3259,7 +3213,7 @@ void M_Calibration_Key (int key)
 #define MIN_TRIGGER_DEADZONE	0.f
 #define MAX_TRIGGER_DEADZONE	0.75f
 #define MIN_GYRO_SENS			0.1f
-#define MAX_GYRO_SENS			8.f
+#define MAX_GYRO_SENS			20.f
 #define MIN_GYRO_NOISE_THRESH	0.f
 #define MAX_GYRO_NOISE_THRESH	5.f
 
@@ -3318,7 +3272,7 @@ void M_Menu_Gamepad_f (void)
 	begin_menu (GRAPHICS_OPTIONS, m_graphics, TITLE("Graphics"))		\
 		item (OPT_SOFTEMU,				"8-bit Mode")					\
 		item (OPT_SOFTEMU_MDL,			"Model Warping")				\
-		item (OPT_MD5,					"Models")						\
+		item (OPT_ENHANCEDMODELS,		"Models")						\
 		item (OPT_ANIMLERP,				"Animations")					\
 		item (OPT_TEXFILTER,			"Textures")						\
 		item (OPT_ANISO,				"Anisotropic")					\
@@ -3641,6 +3595,10 @@ static void M_Options_Preview (int id)
 			case OPT_FOVDISTORT:
 				break;
 
+			case OPT_CONFIRMQUIT:
+				M_ChooseQuitMessage ();
+				break;
+
 			case OPT_CENTERPRINTBG:
 				if (cl.intermission)
 				{
@@ -3794,8 +3752,6 @@ void M_AdjustSliders (int dir)
 	M_ThrottledSound ("misc/menu3.wav");
 	M_List_ClearSearch (&optionsmenu.list);
 
-	M_Options_Preview (M_Options_GetSelected ());
-
 	switch (M_Options_GetSelected ())
 	{
 	case OPT_UISCALE:	// console and menu scale
@@ -3881,11 +3837,11 @@ void M_AdjustSliders (int dir)
 			curr_alwaysrun = ALWAYSRUN_VANILLA;
 		else
 			curr_alwaysrun = ALWAYSRUN_OFF;
-			
+
 		target_alwaysrun = (ALWAYSRUN_ITEMS + curr_alwaysrun + dir) % ALWAYSRUN_ITEMS;
 		if (!ap_can_run () && curr_alwaysrun == 2 && dir == -1)
 			target_alwaysrun = 0;
-			
+
 		if (target_alwaysrun == ALWAYSRUN_VANILLA)
 		{
 			if (ap_can_run ()) {
@@ -4021,8 +3977,8 @@ void M_AdjustSliders (int dir)
 	case OPT_TEXFILTER:
 		Cbuf_AddText ("cycle gl_texturemode GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR\n");
 		break;
-	case OPT_MD5:
-		Cbuf_AddText ("toggle r_md5\n");
+	case OPT_ENHANCEDMODELS:
+		Cbuf_AddText ("toggle r_enhancedmodels\n");
 		break;
 	case OPT_ANIMLERP:
 		Cvar_SetValueQuick (&r_lerpmodels, !r_lerpmove.value);
@@ -4145,6 +4101,8 @@ void M_AdjustSliders (int dir)
 	default:
 		break;
 	}
+
+	M_Options_Preview (M_Options_GetSelected ());
 }
 
 typedef struct
@@ -4654,8 +4612,8 @@ static void M_Options_DrawItem (int y, int item)
 	case OPT_TEXFILTER:
 		M_Print (x, y, VID_Menu_GetTexFilterDesc ());
 		break;
-	case OPT_MD5:
-		M_Print (x, y, r_md5.value ? "Remastered" : "Classic");
+	case OPT_ENHANCEDMODELS:
+		M_Print (x, y, r_enhancedmodels.value ? "Enhanced" : "Classic");
 		break;
 	case OPT_ANIMLERP:
 		M_Print (x, y, r_lerpmodels.value ? "Smooth" : "Classic");
@@ -4947,6 +4905,13 @@ void M_Options_Draw (void)
 	}
 
 	GL_PopCanvasColor ();
+
+	if (M_ForcedQuitMessage (&alpha))
+	{
+		GL_PushCanvasColor (1.f, 1.f, 1.f, alpha);
+		M_DrawQuitMessage ();
+		GL_PopCanvasColor ();
+	}
 }
 
 void M_Options_Key (int k)
@@ -5108,8 +5073,9 @@ typedef struct
 #define QUICKSAVE "echo Quicksaving...; wait; save quick"
 #define QUICKLOAD "echo Quickloading...; wait; load quick"
 
-static const menukeybind_t menubinds[] =
+static const menukeybind_t default_keybinds[] =
 {
+	/* Standard movement/looking bindings *************************************/
 	{"+forward",		"Move forward",			KDM_KEYBOARD_AND_MOUSE},
 	{"+back",			"Move backward",		KDM_KEYBOARD_AND_MOUSE},
 	{"+moveleft",		"Move left",			KDM_KEYBOARD_AND_MOUSE},
@@ -5128,6 +5094,10 @@ static const menukeybind_t menubinds[] =
 	{"zoom_in",			"Toggle zoom",			KDM_ANY},
 	{"+zoom",			"Quick zoom",			KDM_ANY},
 	{"+gyroaction",		"Gyro switch",			KDM_GAMEPAD},
+	{"+altmodifier",	"Alt modifier",			KDM_GAMEPAD},
+	{"",				"",						KDM_ANY},
+	/* Weapons / insertion point for bindlist.lst entries *********************/
+	{"*",				"",						0},
 	{"",				"",						KDM_ANY},
 	{"+attack",			"Attack",				KDM_ANY},
 	{"impulse 10",		"Next weapon",			KDM_ANY},
@@ -5143,6 +5113,9 @@ static const menukeybind_t menubinds[] =
 	{"impulse 225",		"Laser Cannon",			KDM_ANY},
 	{"impulse 226",		"Mjolnir",				KDM_ANY},
 	{"",				"",						KDM_ANY},
+	/* Miscelaneous entries ***************************************************/
+	{"*",				"",						0},
+	{"",				"",						KDM_ANY},
 	{QUICKSAVE,			"Quick save",			KDM_ANY},
 	{QUICKLOAD,			"Quick load",			KDM_ANY},
 	{"menu_load",		"Load menu",			KDM_ANY},
@@ -5150,6 +5123,8 @@ static const menukeybind_t menubinds[] =
 	{"menu_maps",		"Maps menu",			KDM_ANY},
 	{"menu_options",	"Options menu",			KDM_ANY},
 	{"screenshot",		"Screenshot",			KDM_ANY},
+	{"+showscores",		"Show score",			KDM_ANY},
+	{"messagemode",		"Text chat",			KDM_KEYBOARD_AND_MOUSE},
 	{"",				"",						KDM_ANY},
 	// [ap] Added keybinds
 	{"impulse 230",		"AP Quad Damage",		KDM_ANY},
@@ -5166,7 +5141,6 @@ static const menukeybind_t menubinds[] =
 	{"menu_maps",		"AP Map Menu",			KDM_ANY},
 };
 
-#define	NUMCOMMANDS		Q_COUNTOF(menubinds)
 #define KEYLIST_TOP		56						// title plaque, tabs, scroll ellipsis bar
 #define KEYLIST_BOTTOM	24						// scroll ellipsis bar, search box, key hint
 
@@ -5175,10 +5149,71 @@ static struct
 	menulist_t			list;
 	keydevicemask_t		devicemask;
 	int					y;
-	menukeybind_t		*items;
+	int					maxitems;
+	menukeybind_t		*custom_items;			// mod-specific key bindings, loaded from bindlist.lst
+	menukeybind_t		*filtered_items;		// list of items corresponding to active input device
 } keysmenu;
 
 static qboolean	bind_grab;
+
+static void M_Keys_AddCustomEntry (const char *cmd, const char *desc)
+{
+	int i;
+	menukeybind_t new_item;
+
+	// bindlist format uses "-" as separator, convert to empty string
+	if (cmd[0] == '-' && cmd[1] == '\0')
+		cmd++;
+
+	if (cmd[0]) // not a separator
+	{
+		static const char *const deprecated[] =
+		{
+			"+klook",
+			"+mlook",
+		};
+		qboolean filter_enabled = true;
+
+		// skip unsupported entries, e.g. +voip in Mjolnir's bindlist.lst
+		COM_Parse (cmd);
+		if (!Cmd_Exists (com_token) && !Cmd_AliasExists (com_token))
+		{
+			Con_DPrintf ("Skipping unsupported key binding: \"%s\" = \"%s\"\n", desc, cmd);
+			return;
+		}
+
+		// skip deprecated entries, e.g. +klook in Mjolnir's bindlist.lst
+		for (i = 0; i < Q_COUNTOF (deprecated); i++)
+		{
+			if (strcmp (deprecated[i], cmd) == 0)
+			{
+				Con_DPrintf ("Skipping deprecated key binding: \"%s\" = \"%s\"\n", desc, cmd);
+				return;
+			}
+		}
+
+		// The list of default key bindings is split into 3 sections by entries marked with asterisks.
+		// We remove custom bindings duplicating default ones from the first/last section.
+		for (i = 0; i < Q_COUNTOF (default_keybinds); i++)
+		{
+			if (!default_keybinds[i].command[0])
+				continue;
+			if (default_keybinds[i].command[0] == '*')
+			{
+				filter_enabled = !filter_enabled;
+				continue;
+			}
+			if (filter_enabled && strcmp (default_keybinds[i].command, cmd) == 0)
+				return;
+		}
+	}
+
+	// add custom key binding
+	new_item.command = strdup (cmd);
+	new_item.description = strdup (desc);
+	new_item.devicemask = KDM_ANY;
+	VEC_PUSH (keysmenu.custom_items, new_item);
+}
 
 static void M_Keys_UpdateLayout (void)
 {
@@ -5186,9 +5221,9 @@ static void M_Keys_UpdateLayout (void)
 
 	M_UpdateBounds ();
 
-	// Note: we use NUMCOMMANDS instead of keysmenu.list.numitems to have a stable layout
+	// Note: we use keysmenu.maxitems instead of keysmenu.list.numitems to have a stable layout
 	// when switching between keyboard+mouse/gamepad tabs (different number of items)
-	height = NUMCOMMANDS * 8 + KEYLIST_TOP + KEYLIST_BOTTOM;
+	height = keysmenu.maxitems * 8 + KEYLIST_TOP + KEYLIST_BOTTOM;
 	height = q_min (height, m_height);
 	keysmenu.y = m_top + (((m_height - height) / 2) & ~7);
 	keysmenu.list.viewsize = (height - KEYLIST_TOP - KEYLIST_BOTTOM) / 8;
@@ -5196,47 +5231,122 @@ static void M_Keys_UpdateLayout (void)
 
 static qboolean M_Keys_IsSelectable (int index)
 {
-	return keysmenu.items[index].command[0] != '\0';
+	return keysmenu.filtered_items[index].command[0] != '\0';
 }
 
 static qboolean M_Keys_Match (int index)
 {
-	const char *name = keysmenu.items[index].description;
+	const char *name = keysmenu.filtered_items[index].description;
 	if (!*name)
 		return false;
 	return q_strcasestr (name, keysmenu.list.search.text) != NULL;
 }
 
-static void M_Keys_Populate (void)
+static void M_Keys_AddItem (const menukeybind_t *item)
 {
-	int i;
+	size_t i;
 
-	VEC_CLEAR (keysmenu.items);
+	// filter by device type
+	if (!(keysmenu.devicemask & item->devicemask))
+		return;
 
-	for (i = 0; i < NUMCOMMANDS; i++)
+	// skip duplicate entries
+	if (item->command[0])
 	{
-		// filter item by device type
-		if (!(keysmenu.devicemask & menubinds[i].devicemask))
-			continue;
-
-		if (!hipnotic && (strcmp (menubinds[i].command, "impulse 225") == 0 || strcmp (menubinds[i].command, "impulse 226") == 0))
-			continue;
-
-		// if we have two separators in a row, overwrite the old one
-		if (VEC_SIZE (keysmenu.items) > 0 && !menubinds[i].command[0] && !VEC_LAST(keysmenu.items).command[0])
-			VEC_LAST(keysmenu.items) = menubinds[i];
-		else // otherwise add a new item
-			VEC_PUSH (keysmenu.items, menubinds[i]);
+		for (i = 0; i < VEC_SIZE (keysmenu.filtered_items); i++)
+		{
+			const menukeybind_t *existimg_item = &keysmenu.filtered_items[i];
+			if (existimg_item->command[0] && strcmp( item->command, existimg_item->command ) == 0)
+				return;
+		}
 	}
 
-	keysmenu.list.numitems = (int) VEC_SIZE (keysmenu.items);
+	// if we have two separators in a row, overwrite the old one
+	if (VEC_SIZE (keysmenu.filtered_items) > 0 && !item->command[0] && !VEC_LAST (keysmenu.filtered_items).command[0])
+		VEC_LAST (keysmenu.filtered_items) = *item;
+	else // otherwise add a new item
+		VEC_PUSH (keysmenu.filtered_items, *item);
+
+	keysmenu.list.numitems = (int) VEC_SIZE (keysmenu.filtered_items);
+}
+
+static void M_Keys_Populate (void)
+{
+	qboolean added_custom_entries = false;
+	size_t i, j;
+
+	VEC_CLEAR (keysmenu.filtered_items);
+
+	for (i = 0; i < Q_COUNTOF (default_keybinds); i++)
+	{
+		const menukeybind_t *item = &default_keybinds[i];
+
+		if (!hipnotic && (strcmp (item->command, "impulse 225") == 0 || strcmp (item->command, "impulse 226") == 0))
+			continue;
+
+		if (item->command[0] == '*') // section boundary (movement/gameplay/misc)
+		{
+			if (!added_custom_entries)
+			{
+				added_custom_entries = true;
+				for (j = 0; j < VEC_SIZE (keysmenu.custom_items); j++)
+					M_Keys_AddItem (&keysmenu.custom_items[j]);
+			}
+			continue;
+		}
+
+		M_Keys_AddItem (item);
+	}
+
 	keysmenu.list.cursor = 0;
 	keysmenu.list.scroll = 0;
 }
 
 void M_Menu_Keys_f (void)
 {
+	size_t i;
+	char *file;
 	keydevice_t lastactive = IN_GetLastActiveDeviceType ();
+
+	// free custom items
+	for (i = 0; i < VEC_SIZE (keysmenu.custom_items); i++)
+	{
+		menukeybind_t *item = &keysmenu.custom_items[i];
+		free ((void *)item->command);
+		free ((void *)item->description);
+	}
+	VEC_CLEAR (keysmenu.custom_items);
+
+	// load custom items from bindlist.lst
+	file = (char*) COM_LoadMallocFile ("bindlist.lst", NULL);
+	if (file)
+	{
+		char *text = file;
+		char *line;
+
+		while (COM_ParseMutableLine (&text, &line))
+		{
+			const char *cmd, *desc;
+			Cmd_TokenizeString (line);
+			cmd = Cmd_Argv (0);
+			desc = Cmd_Argv (1);
+			/*tip = Cmd_Argv(2); unused in quakespasm*/
+
+			M_Keys_AddCustomEntry( cmd, desc );
+		}
+
+		free (file);
+	}
+
+	// hacky: determine the maximum number of items by populating the item list for both kb/m & gamepad
+	// (easy way to properly account for the quirky item deduplication logic)
+	keysmenu.maxitems = 0;
+	keysmenu.devicemask = KDM_KEYBOARD_AND_MOUSE;
+	M_Keys_Populate ();
+	keysmenu.maxitems = q_max (keysmenu.maxitems, keysmenu.list.numitems);
+	keysmenu.devicemask = KDM_GAMEPAD;
+	M_Keys_Populate ();
+	keysmenu.maxitems = q_max (keysmenu.maxitems, keysmenu.list.numitems);
 
 	IN_DeactivateForMenu();
 	key_dest = key_menu;
@@ -5311,23 +5421,23 @@ void M_Keys_Draw (void)
 			M_DrawEllipsisBar (x, y + keysmenu.list.viewsize*8, cols);
 	}
 
-	// search for known bindings
+	// draw items
 	M_List_GetVisibleRange (&keysmenu.list, &firstvis, &numvis);
 	while (numvis-- > 0)
 	{
 		i = firstvis++;
 
-		if (keysmenu.items[i].command[0])
+		if (keysmenu.filtered_items[i].command[0])
 		{
 			char buf[64];
 			qboolean active = (i == keysmenu.list.cursor && bind_grab);
 			void (*print_fn) (int cx, int cy, const char *text) =
 				active ? M_PrintWhite : M_Print;
 
-			COM_TintSubstring (keysmenu.items[i].description, keysmenu.list.search.text, buf, sizeof (buf));
+			COM_TintSubstring (keysmenu.filtered_items[i].description, keysmenu.list.search.text, buf, sizeof (buf));
 			M_PrintDotFill (0, y, buf, 17, !active);
 
-			M_FindKeysForCommand (keysmenu.items[i].command, keys);
+			M_FindKeysForCommand (keysmenu.filtered_items[i].command, keys);
 			// If we already have 3 keys bound to this action
 			// they will all be unbound when a new one is assigned.
 			// We show this outcome to the user before it actually
@@ -5354,7 +5464,8 @@ void M_Keys_Draw (void)
 			{
 				if (!active)
 					GL_SetCanvasColor (1.f, 1.f, 1.f, 0.375f);
-				print_fn (x, y, "???");
+				hint = (bind_grab && i == keysmenu.list.cursor && Key_GetGamepadAltModifierState()) ? "Alt-???" : "???";
+				print_fn (x, y, hint);
 				GL_SetCanvasColor (1.f, 1.f, 1.f, 1.f);
 			}
 		}
@@ -5403,7 +5514,15 @@ void M_Keys_Key (int k)
 			if (!(Key_GetDeviceMaskForKeynum (k) & keysmenu.devicemask))
 				return;
 
-			command = keysmenu.items[keysmenu.list.cursor].command;
+			command = keysmenu.filtered_items[keysmenu.list.cursor].command;
+			if (!Cmd_IsGamepadAltModifier (command))
+			{
+				if (Key_IsKeyGamepadAltModifier (k))
+					return;
+				else if (Key_GetGamepadAltModifierState ())
+					k += K_LTHUMB_ALT - K_LTHUMB;
+			}
+
 			M_FindKeysForCommand (command, keys);
 			if (keys[2] != -1)
 				M_UnbindCommand (command);
@@ -5454,7 +5573,7 @@ void M_Keys_Key (int k)
 	case K_DEL:
 	case K_YBUTTON:
 		M_ThrottledSound ("misc/menu2.wav");
-		M_UnbindCommand (keysmenu.items[keysmenu.list.cursor].command);
+		M_UnbindCommand (keysmenu.filtered_items[keysmenu.list.cursor].command);
 		break;
 	}
 }
@@ -5587,6 +5706,11 @@ const char*const quitMessage [] =
   "\xD9\x65s   \xCE\x6F",
 };
 
+void M_ChooseQuitMessage (void)
+{
+	msgNumber = (cl_confirmquit.value >= 2.f) ? (int)(realtime*(5.0*1.61803399))&7 : 8;
+}
+
 void M_Menu_Quit_f (void)
 {
 	if (m_state == m_quit)
@@ -5597,7 +5721,7 @@ void M_Menu_Quit_f (void)
 	m_quit_prevstate = m_state;
 	m_state = m_quit;
 	m_entersound = true;
-	msgNumber = (cl_confirmquit.value >= 2.f) ? (int)(realtime*(5.0*1.61803399))&7 : 8;
+	M_ChooseQuitMessage ();
 }
 
 
@@ -5672,19 +5796,21 @@ textmode_t M_Quit_TextEntry (void)
 	return TEXTMODE_NOPOPUP;
 }
 
+qboolean M_ForcedQuitMessage (float *alpha)
+{
+	qboolean forced = (key_dest == key_menu && M_GetBaseState (m_state) == m_options) ? optionsmenu.preview.id == OPT_CONFIRMQUIT : false;
+	if (alpha)
+		*alpha = forced ? M_Options_PreviewAlpha () : 0.f;
+	return forced;
+}
 
-void M_Quit_Draw (void) //johnfitz -- modified for new quit message
+void M_DrawQuitMessage (void)
 {
 	const char*const *msg = quitMessage + msgNumber*4;
 	int i, boxlen = 0;
 
-	if (wasInMenus)
-	{
-		m_state = m_quit_prevstate;
-		m_recursiveDraw = true;
-		M_Draw ();
-		m_state = m_quit;
-	}
+	if (!cl_confirmquit.value)
+		return;
 
 	//okay, this is kind of fucked up.  M_DrawTextBox will always act as if
 	//width is even. Also, the width and lines values are for the interior of the box,
@@ -5700,6 +5826,20 @@ void M_Quit_Draw (void) //johnfitz -- modified for new quit message
 	//now do the text
 	for (i = 0; i < 4; i++)
 		M_Print (160 - 8*((strlen(msg[i])+1)>>1), 88 + i*8, msg[i]);
+}
+
+
+void M_Quit_Draw (void) //johnfitz -- modified for new quit message
+{
+	if (wasInMenus)
+	{
+		m_state = m_quit_prevstate;
+		m_recursiveDraw = true;
+		M_Draw ();
+		m_state = m_quit;
+	}
+
+	M_DrawQuitMessage ();
 }
 
 //=============================================================================
@@ -6937,7 +7077,7 @@ void M_Mods_Key (int key)
 		item = modsmenu.items[modsmenu.list.cursor].source;
 		if (Modlist_GetStatus (item) == MODSTATUS_INSTALLED)
 		{
-			Cbuf_AddText (va ("game %s\n", item->name));
+			Cbuf_AddText (va ("game \"%s\"\n", item->name));
 			M_Menu_Main_f ();
 		}
 		else
@@ -7019,7 +7159,7 @@ static void M_ModInfo_UpdateLayout (void)
 	str = modinfomenu.author;
 	while (*str && height < MODINFO_MAXAUTHORLINES)
 	{
-		M_LineWrap (&str, MODINFO_INFOCOLS);
+		COM_AdvanceLineWrapped (&str, MODINFO_INFOCOLS);
 		height++;
 	}
 
@@ -7365,7 +7505,7 @@ void M_Draw (void)
 		break;
 
 	case m_quit:
-		if (!fitzmode && !cl_confirmquit.value)
+		if (!cl_confirmquit.value)
 		{ /* QuakeSpasm customization: */
 			/* Quit now! S.A. */
 			key_dest = key_console;
@@ -7401,7 +7541,7 @@ void M_Draw (void)
 }
 
 
-void M_Keydown (int key)
+void M_Keydown (int key, qboolean repeat)
 {
 	if (!bind_grab && !ui_mouse.value && M_IsMouseKey (key))
 		return;
@@ -7417,6 +7557,24 @@ void M_Keydown (int key)
 			case K_DPAD_RIGHT:	key = K_RIGHTARROW; break;
 			default:
 				break;
+		}
+	}
+
+	// only allow repeat events for a few navigational keys
+	// this reduces sound spam and, for gamepads, rumble spam
+	// (particularly noticeable while holding the alt modifier when changing bindings)
+	if (repeat)
+	{
+		switch (key)
+		{
+		case K_UPARROW:
+		case K_DOWNARROW:
+		case K_LEFTARROW:
+		case K_RIGHTARROW:
+		case K_ESCAPE:
+			break;
+		default:
+			return;
 		}
 	}
 
@@ -7750,6 +7908,7 @@ void M_CheckMods (void)
 	m_singleplayer_showlevels = M_CheckCustomGfx ("gfx/sp_maps.lmp",
 		"gfx/sp_menu.lmp", 14856, sp_hashes, countof (sp_hashes));
 	if (AP_HOOK) m_singleplayer_showlevels = 0;
+
 	m_skill_usegfx = M_CheckCustomGfx ("gfx/skillmenu.lmp",
 		"gfx/sp_menu.lmp", 14856, sp_hashes, countof (sp_hashes));
 
