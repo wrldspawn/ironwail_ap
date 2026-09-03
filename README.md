@@ -57,8 +57,8 @@ Compile with GCC with the following flags added
 $(pkg-config --cflags glib-2.0 libwebsockets jansson) -Wno-incompatible-pointer-types -Wno-error=format-security -I/path/to/folder/containing/rapidhash
 ```
 
-The included Nix package can be found includes extra patches for separating executable names and userdir to allow
-vanilla Ironwail to be installed alongside.
+The included Nix package includes extra patches for separating executable names and userdir to allow vanilla Ironwail
+to be installed alongside.
 
 # Original Ironwail Readme:
 

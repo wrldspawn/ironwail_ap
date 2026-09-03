@@ -134,7 +134,7 @@
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "ironwail-ap";
-  version = "1.1.6";
+  version = "1.1.9";
 
   src = ./../Quake;
 
@@ -180,7 +180,7 @@ stdenv.mkDerivation (finalAttrs: {
   postPatch = ''
     substituteInPlace quakedef.h \
       --replace-fail '#define ENGINE_USERDIR_UNIX		".ironwail"' '#define ENGINE_USERDIR_UNIX		".ironwail-ap"' \
-      --replace-fail '#define IRONWAIL_VER_SUFFIX		"-dev"' '#define IRONWAIL_VER_SUFFIX		"-ap${finalAttrs.version}"'
+      --replace-fail '#define IRONWAIL_VER_SUFFIX		""' '#define IRONWAIL_VER_SUFFIX		"-ap${finalAttrs.version}"'
 
     substituteInPlace Makefile \
       --replace-fail 'cp ironwail.pak /usr/local/games/quake' "cp ironwail.pak $out/share/quake/ironwail.pak" \
