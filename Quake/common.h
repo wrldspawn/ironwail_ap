@@ -353,6 +353,7 @@ unsigned COM_HashBlock (const void *data, size_t size);
 
 // localization support for 2021 rerelease version:
 void LOC_Init (void);
+void LOC_Load (void);
 void LOC_Shutdown (void);
 const char* LOC_GetRawString (const char *key);
 const char* LOC_GetString (const char *key);
@@ -482,7 +483,7 @@ long FS_filelength (fshandle_t *fh);
 
 
 extern struct cvar_s	registered;
-extern qboolean		standard_quake, rogue, hipnotic;
+extern qboolean		standard_quake, rogue, hipnotic, mg3;
 
 #endif	/* _Q_COMMON_H */
 
