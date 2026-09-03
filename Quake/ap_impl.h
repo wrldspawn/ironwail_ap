@@ -18,6 +18,7 @@
 #define AP_KEEP_SPAWNS 0
 
 #define AP_EDICT_RESPAWN_TIMER 3.0f
+#define AP_EDICT_LOAD_RESPAWN_TIMER 0.5f
 
 /*
 #ifdef _DEBUG
@@ -121,6 +122,7 @@ extern char* ap_current_map;
 #define AP_VALID_LOCATION(x) (AP_LOCATION_CHECK_MASK(x, AP_LOC_USED))
 #define AP_LOCATION_CHECKED(x) (AP_LOCATION_CHECK_MASK(x, (AP_LOC_USED | AP_LOC_CHECKED)))
 #define AP_LOCATION_PROGRESSION(x) (AP_LOCATION_CHECK_MASK(x, (AP_LOC_USED | AP_LOC_PROGRESSION)))
+#define AP_LOCATION_USEFUL(x) (AP_LOCATION_CHECK_MASK(x, (AP_LOC_USED | AP_LOC_USEFUL)))
 #define AP_LOCATION_TRAP(x) (AP_LOCATION_CHECK_MASK(x, (AP_LOC_USED | AP_LOC_TRAP)))
 
 // AP Enums
@@ -194,6 +196,7 @@ extern void ap_set_ammo_to_max ();
 // Extern AP Lib Funcs
 extern void ap_init_connection ();
 extern int AP_CheckLocation (uint64_t loc_hash, char* loc_type);
+extern ap_location_t edict_to_ap_locid (uint64_t loc_hash, char* loc_type);
 extern void AP_SendExit (char* mapname);
 extern VictoryStats AP_VictoryStats (char* victory_name);
 extern void ap_on_map_load (char* mapname);

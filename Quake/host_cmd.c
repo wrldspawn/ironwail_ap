@@ -2730,6 +2730,7 @@ static void Host_Loadgame_f (void)
 	qcvm->num_edicts = entnum;
 	qcvm->time = time;
 	sv.autosave.time = time;
+	SV_ResetAPModelRespawns ();
 
 	free (start);
 	start = NULL;
